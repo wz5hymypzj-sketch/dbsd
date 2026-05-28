@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>DAN'S BEAT SPEED DETECTOR - V20</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -156,6 +156,69 @@
   .big-nav-controls button:active { transform: translateY(2px); box-shadow: 0 2px 0 #000; background: #e0e0e0; }
   
   .laptop-hint { text-align: center; font-size: 0.55rem; color: #888; margin-top: 8px; margin-bottom: 4px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em; flex-shrink: 0; }
+
+  /* Portrait: display:contents makes leftCol transparent -
+     children participate directly in body flex, preserving exact portrait layout */
+  #leftCol { display: contents; }
+
+  /* ===== LANDSCAPE PHONE MODE (phones only - desktop excluded by max-height) ===== */
+  @media (orientation: landscape) and (max-height: 500px) {
+    body {
+      max-width: 100%;
+      padding-top: env(safe-area-inset-top, 4px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+      padding-left: calc(env(safe-area-inset-left, 0px) + 4px);
+      padding-right: calc(env(safe-area-inset-right, 0px) + 4px);
+    }
+    /* leftCol becomes a 2-column grid:
+       col 1 (55%): all controls + nav buttons (pushed to bottom via 1fr row)
+       col 2 (45%): workspace, spans all rows */
+    #leftCol {
+      display: grid;
+      grid-template-columns: 55fr 45fr;
+      grid-template-rows: auto auto auto auto auto 1fr auto;
+      column-gap: 6px;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    /* Assign each control to column 1 */
+    .header          { grid-column: 1; grid-row: 1; margin-bottom: 2px; }
+    .iv-tabs         { grid-column: 1; grid-row: 2; margin-bottom: 2px; }
+    .roll-wrapper    { grid-column: 1; grid-row: 3; margin-bottom: 2px; }
+    .param-strip     { grid-column: 1; grid-row: 4; margin-bottom: 2px; }
+    .dual-readout    { grid-column: 1; grid-row: 5; margin-bottom: 0; }
+    .big-nav-controls{ grid-column: 1; grid-row: 6; align-self: end; gap: 6px; padding-top: 0; }
+    .laptop-hint     { grid-column: 1; grid-row: 7; margin-top: 2px; margin-bottom: 0; font-size: 0.48rem; }
+    /* Workspace: column 2, spans all 7 rows, fills full height */
+    .workspace {
+      grid-column: 2;
+      grid-row: 1 / 8;
+      overflow-y: auto;
+      border-radius: 4px;
+      border: 1px solid #000;
+      align-self: stretch;
+    }
+    /* Scale down controls to fit landscape height */
+    h1 { font-size: 0.7rem; margin-bottom: 2px; }
+    .mode-btn { font-size: 0.55rem; padding: 4px 1px; }
+    .iv-tab { padding: 3px 0; font-size: 0.55rem; }
+    .roll-wrapper { padding: 2px; }
+    .pk { height: 44px; font-size: 0.58rem; padding-bottom: 3px; }
+    .pk.sh { height: 28px; }
+    .roll-nav { height: 34px; width: 24px; font-size: 0.9rem; }
+    .param-strip { padding: 3px 8px; }
+    .param-lbl { font-size: 0.55rem; }
+    #lblInterval { font-size: 0.85rem !important; }
+    #coincidentPartial { font-size: 0.7rem !important; }
+    .readout-box { padding: 3px 6px; }
+    .val-large { font-size: 1.7rem; }
+    .val-lbl { font-size: 0.65rem; margin-top: 0; }
+    .textbook-bps { font-size: 0.65rem; bottom: 3px; right: 6px; }
+    #signalLight { width: 9px; height: 9px; top: 5px; left: 6px; }
+    #captureStateLbl { font-size: 0.58rem; top: 5px; right: 6px; }
+    .big-nav-controls button { height: 30px; font-size: 0.95rem; box-shadow: 0 3px 0 #000; }
+    .big-nav-controls button:active { transform: translateY(1px); box-shadow: 0 1px 0 #000; }
+  }
 </style>
 </head>
 <body>
@@ -165,6 +228,7 @@
   <button id="bigStartBtn">ENTER</button>
 </div>
 
+<div id="leftCol">
 <div class="header">
   <h1>DAN'S BEAT SPEED DETECTOR</h1>
   <div class="controls-row">
@@ -391,6 +455,7 @@
   <button id="btnBigUp">+1st</button>
 </div>
 <div class="laptop-hint">Arrow keys to change notes</div>
+</div><!-- /#leftCol -->
 
 <script>
 const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
