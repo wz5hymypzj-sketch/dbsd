@@ -148,7 +148,9 @@
   .dynamic-btn:disabled { cursor: not-allowed; opacity: 0.3; }
   .dynamic-target { font-size: 1.2rem; font-weight: 900; color: #d00000; min-width: 40px; text-align: center; }
 
-  .big-nav-controls { display: flex; gap: 12px; padding-top: 2px; flex-shrink: 0; margin-bottom: 0; }
+  .laptop-hint { display: none; }
+
+  .big-nav-controls { display: flex; gap: 12px; padding-top: 6px; flex-shrink: 0; margin-bottom: 0; }
   .big-nav-controls button {
     flex: 1; height: 42px; font-size: 1.2rem; font-weight: 900; border-radius: 8px; border: 3px solid #000; 
     background: #f4f4f4; color: #000; cursor: pointer; box-shadow: 0 4px 0 #000;
@@ -199,11 +201,28 @@
     }
     .left-panel::-webkit-scrollbar { display: none; }
 
-    /* Fix title shrinking in landscape — use vmin so it scales on the shorter axis */
+    /* Title: bigger in landscape */
     .left-panel h1 {
-      font-size: clamp(1rem, 4vmin, 1.6rem);
-      margin-bottom: 2px;
+      font-size: clamp(1.1rem, 5.5vmin, 2rem);
+      margin-bottom: 3px;
     }
+
+    /* LOGS / GUIDE / MIC / PASS buttons: bigger */
+    .left-panel .mode-btn {
+      font-size: 0.78rem;
+      padding: 9px 2px;
+    }
+
+    /* Interval selector tabs: bigger */
+    .left-panel .iv-tab {
+      font-size: 0.78rem;
+      padding: 9px 0;
+    }
+
+    /* Piano roll: taller keys */
+    .left-panel .pk   { height: 80px; font-size: 0.82rem; }
+    .left-panel .pk.sh { height: 52px; }
+    .left-panel .roll-nav { height: 62px; }
 
     /* Zero out portrait margins so space-between distributes the gap cleanly */
     .left-panel .header       { margin-bottom: 0; flex-shrink: 0; }
@@ -211,9 +230,13 @@
     .left-panel .roll-wrapper { margin-bottom: 0; flex-shrink: 0; }
     .left-panel .param-strip  { margin-bottom: 0; flex-shrink: 0; }
 
-    /* BPS readout: grow to fill all remaining space */
-    .left-panel .dual-readout { flex: 1 1 auto; margin-bottom: 0; min-height: 0; }
-    .left-panel .readout-box  {
+    /* BPS readout: smaller fixed height, doesn't dominate */
+    .left-panel .dual-readout {
+      flex: 0 1 100px;
+      min-height: 70px;
+      margin-bottom: 0;
+    }
+    .left-panel .readout-box {
       height: 100%;
       display: flex;
       flex-direction: column;
@@ -221,10 +244,9 @@
       justify-content: center;
       border-width: 3px;
     }
-    /* Scale up the large BPS number to fill the bigger box */
-    .left-panel .val-large { font-size: clamp(2.5rem, 9vh, 5.5rem); }
-    .left-panel .val-lbl   { font-size: clamp(0.8rem, 2.2vh, 1.1rem); margin-top: 4px; }
-    .left-panel .textbook-bps { font-size: clamp(0.85rem, 2vh, 1rem); }
+    .left-panel .val-large    { font-size: clamp(1.6rem, 4.5vh, 2.8rem); }
+    .left-panel .val-lbl      { font-size: clamp(0.65rem, 1.6vh, 0.85rem); margin-top: 2px; }
+    .left-panel .textbook-bps { font-size: clamp(0.7rem, 1.5vh, 0.85rem); }
 
     .right-panel { flex: 45; height: 100%; }
   }
@@ -478,6 +500,61 @@ window.addEventListener('orientationchange', () => {
 });
 window.addEventListener('resize', () => { window.scrollTo(0, 0); });
 
+// --- Built-in iPhone mic locking ---
+// Returns getUserMedia audio constraints that prefer the iPhone's built-in mic.
+// After initial permission is granted, enumerateDevices gives us labelled entries;
+// we pick any input that looks built-in and avoid anything Bluetooth/AirPods.
+async function getBuiltInMicConstraints() {
+  const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 };
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices.filter(d => d.kind === 'audioinput');
+    const builtIn = inputs.find(d =>
+      /iphone|built.?in|internal|wired|bottom|front/i.test(d.label) &&
+      !/airpod|bluetooth|bt |wireless|headset/i.test(d.label)
+    );
+    if (builtIn && builtIn.deviceId) return { ...base, deviceId: { exact: builtIn.deviceId } };
+  } catch(e) {}
+  return base; // fallback: let the browser choose
+}
+
+// Re-lock to the built-in mic whenever the device list changes (e.g. AirPods connect mid-session)
+navigator.mediaDevices.addEventListener('devicechange', async () => {
+  if (!isRunning || micPaused) return;
+  // Check if the current stream is now using a Bluetooth/AirPods track
+  if (micStream) {
+    const track = micStream.getAudioTracks()[0];
+    const label = (track && track.label) || '';
+    if (/airpod|bluetooth|bt |wireless|headset/i.test(label)) {
+      // AirPods have taken the mic — rebuild pipeline on built-in mic
+      const tracksLost = true; // force reinit path in visibilitychange logic
+      if (audioCtx) { try { audioCtx.close(); } catch(e) {} audioCtx = null; }
+      try {
+        const constraints = await getBuiltInMicConstraints();
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+        micStream = stream;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        const src = audioCtx.createMediaStreamSource(stream);
+        analyserFull = audioCtx.createAnalyser(); analyserFull.fftSize = 4096; analyserFull.smoothingTimeConstant = 0.7;
+        tunerFilter = audioCtx.createBiquadFilter(); tunerFilter.type = 'bandpass'; tunerFilter.frequency.value = 440.0; tunerFilter.Q.value = 8.0;
+        analyserTuner = audioCtx.createAnalyser(); analyserTuner.fftSize = 4096;
+        src.connect(tunerFilter); tunerFilter.connect(analyserTuner);
+        const cfg = getConfig(lowerMidi, curIv); filters = buildFilters(cfg);
+        gainNode = audioCtx.createGain(); gainNode.gain.value = 250.0;
+        monitorGain = audioCtx.createGain(); monitorGain.gain.value = monitorOn ? 25.0 : 0.0;
+        scriptNode = audioCtx.createScriptProcessor(1024, 1, 1);
+        src.connect(analyserFull); src.connect(filters[0]); filters[0].connect(filters[1]); filters[1].connect(filters[2]);
+        filters[2].connect(gainNode); filters[2].connect(monitorGain); monitorGain.connect(audioCtx.destination);
+        gainNode.connect(scriptNode); scriptNode.connect(audioCtx.destination);
+        scriptNode.onaudioprocess = buildAudioProcessor();
+        if (rafId) cancelAnimationFrame(rafId);
+        lastEnvelope = 0; rafId = requestAnimationFrame(renderLoop);
+      } catch(e) { console.warn('devicechange mic reinit failed:', e); }
+    }
+  }
+});
+
 // Auto-resume microphone when returning to the app after backgrounding
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible' || !isRunning || micPaused) return;
@@ -494,7 +571,8 @@ document.addEventListener('visibilitychange', async () => {
       // Tear down old context cleanly
       if (audioCtx) { try { audioCtx.close(); } catch(e) {} audioCtx = null; }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+      const constraints = await getBuiltInMicConstraints();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
       micStream = stream;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') await audioCtx.resume();
@@ -514,31 +592,7 @@ document.addEventListener('visibilitychange', async () => {
       filters[2].connect(gainNode); filters[2].connect(monitorGain); monitorGain.connect(audioCtx.destination);
       gainNode.connect(scriptNode); scriptNode.connect(audioCtx.destination);
 
-      scriptNode.onaudioprocess = (e) => {
-        if (!isRunning || micPaused) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        for (let offset = 0; offset < inputData.length; offset += currentChunkSize) {
-          let sum = 0, limit = Math.min(currentChunkSize, inputData.length - offset);
-          for (let i = 0; i < limit; i++) sum += inputData[offset + i] * inputData[offset + i];
-          const rms = Math.sqrt(sum / limit); envelopeRunning = rms;
-          const strikeMult = currentChunkSize === 256 ? 1.8 : 2.5;
-          const isStrike = (envelopeRunning > lastEnvelope * strikeMult) && (envelopeRunning > 0.005);
-          lastEnvelope = envelopeRunning;
-          noiseFloor = noiseFloor * 0.996 + Math.min(envelopeRunning, noiseFloor * 1.5) * 0.004;
-          if (noiseFloor < 0.000001) noiseFloor = 0.000001;
-          const snr = envelopeRunning / noiseFloor;
-          if (isStrike && snr > 3.0) {
-            const timeNow = performance.now();
-            if (timeNow - lastAttackTime > 400 && (captureState === 'IDLE' || captureState === 'LOCKED')) {
-              envHistory = []; lastAttackTime = timeNow; transientSamplesLeft = currentChunkSize === 256 ? 72 : 18;
-              captureState = 'WAIT'; captureStartTime = timeNow; capturedBeats = [];
-              $('captureStateLbl').textContent = 'WAITING...'; $('captureStateLbl').style.color = '#ff9900';
-            }
-          }
-          if (transientSamplesLeft > 0) { transientSamplesLeft--; }
-          else { envHistory.push({ val: envelopeRunning }); const fps = audioCtx.sampleRate / currentChunkSize; if (envHistory.length > Math.round(3.5 * fps)) envHistory.shift(); }
-        }
-      };
+      scriptNode.onaudioprocess = buildAudioProcessor();
 
       // Restart render loop if it died
       if (rafId) cancelAnimationFrame(rafId);
@@ -1053,11 +1107,20 @@ function runTuner() {
 $('bigStartBtn').addEventListener('click', async () => {
   $('startOverlay').style.display = 'none';
   try {
+    // First call (no labels yet) — browser will use default mic; after this we can enumerate
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
     micStream = stream;
+    // Now labels are available — if a non-built-in mic was chosen, reacquire on the built-in one
+    const constraints = await getBuiltInMicConstraints();
+    if (constraints.deviceId) {
+      stream.getTracks().forEach(t => t.stop());
+      const betterStream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+      micStream = betterStream;
+    }
+    const activeStream = micStream;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
-    const src = audioCtx.createMediaStreamSource(stream);
+    const src = audioCtx.createMediaStreamSource(activeStream);
     analyserFull = audioCtx.createAnalyser(); analyserFull.fftSize = 4096; analyserFull.smoothingTimeConstant = 0.7;
     
     tunerFilter = audioCtx.createBiquadFilter(); tunerFilter.type = 'bandpass'; tunerFilter.frequency.value = 440.0; tunerFilter.Q.value = 8.0; 
@@ -1073,35 +1136,39 @@ $('bigStartBtn').addEventListener('click', async () => {
     filters[2].connect(gainNode); filters[2].connect(monitorGain); monitorGain.connect(audioCtx.destination);
     gainNode.connect(scriptNode); scriptNode.connect(audioCtx.destination);
 
-    scriptNode.onaudioprocess = (e) => {
-      if (!isRunning || micPaused) return; 
-      const inputData = e.inputBuffer.getChannelData(0);
-      for (let offset = 0; offset < inputData.length; offset += currentChunkSize) {
-          let sum = 0, limit = Math.min(currentChunkSize, inputData.length - offset);
-          for (let i = 0; i < limit; i++) sum += inputData[offset + i] * inputData[offset + i];
-          const rms = Math.sqrt(sum / limit); envelopeRunning = rms;
-          const strikeMult = currentChunkSize === 256 ? 1.8 : 2.5;
-          const isStrike = (envelopeRunning > lastEnvelope * strikeMult) && (envelopeRunning > 0.005);
-          lastEnvelope = envelopeRunning;
-          noiseFloor = noiseFloor * 0.996 + Math.min(envelopeRunning, noiseFloor * 1.5) * 0.004;
-          if (noiseFloor < 0.000001) noiseFloor = 0.000001;
-          const snr = envelopeRunning / noiseFloor;
-          
-          if (isStrike && snr > 3.0) {
-            const timeNow = performance.now();
-            if (timeNow - lastAttackTime > 400 && (captureState === 'IDLE' || captureState === 'LOCKED')) { 
-              envHistory = []; lastAttackTime = timeNow; transientSamplesLeft = currentChunkSize === 256 ? 72 : 18; 
-              captureState = 'WAIT'; captureStartTime = timeNow; capturedBeats = [];
-              $('captureStateLbl').textContent = 'WAITING...'; $('captureStateLbl').style.color = '#ff9900';
-            }
-          }
-          if (transientSamplesLeft > 0) { transientSamplesLeft--; } 
-          else { envHistory.push({ val: envelopeRunning }); const fps = audioCtx.sampleRate / currentChunkSize; if (envHistory.length > Math.round(3.5 * fps)) envHistory.shift(); }
-      }
-    };
+    scriptNode.onaudioprocess = buildAudioProcessor();
     isRunning = true; lastEnvelope = 0; rafId = requestAnimationFrame(renderLoop);
   } catch(e) { alert('Microphone setup failed:\n' + e.message); $('startOverlay').style.display = 'flex'; }
 });
+
+// Shared audio processor — returns the onaudioprocess handler used by all pipeline builds
+function buildAudioProcessor() {
+  return (e) => {
+    if (!isRunning || micPaused) return;
+    const inputData = e.inputBuffer.getChannelData(0);
+    for (let offset = 0; offset < inputData.length; offset += currentChunkSize) {
+      let sum = 0, limit = Math.min(currentChunkSize, inputData.length - offset);
+      for (let i = 0; i < limit; i++) sum += inputData[offset + i] * inputData[offset + i];
+      const rms = Math.sqrt(sum / limit); envelopeRunning = rms;
+      const strikeMult = currentChunkSize === 256 ? 1.8 : 2.5;
+      const isStrike = (envelopeRunning > lastEnvelope * strikeMult) && (envelopeRunning > 0.005);
+      lastEnvelope = envelopeRunning;
+      noiseFloor = noiseFloor * 0.996 + Math.min(envelopeRunning, noiseFloor * 1.5) * 0.004;
+      if (noiseFloor < 0.000001) noiseFloor = 0.000001;
+      const snr = envelopeRunning / noiseFloor;
+      if (isStrike && snr > 3.0) {
+        const timeNow = performance.now();
+        if (timeNow - lastAttackTime > 400 && (captureState === 'IDLE' || captureState === 'LOCKED')) {
+          envHistory = []; lastAttackTime = timeNow; transientSamplesLeft = currentChunkSize === 256 ? 72 : 18;
+          captureState = 'WAIT'; captureStartTime = timeNow; capturedBeats = [];
+          $('captureStateLbl').textContent = 'WAITING...'; $('captureStateLbl').style.color = '#ff9900';
+        }
+      }
+      if (transientSamplesLeft > 0) { transientSamplesLeft--; }
+      else { envHistory.push({ val: envelopeRunning }); const fps = audioCtx.sampleRate / currentChunkSize; if (envHistory.length > Math.round(3.5 * fps)) envHistory.shift(); }
+    }
+  };
+}
 
 function buildFilters(cfg) {
   const Q = (cfg.center / (cfg.bpHi - cfg.bpLo)) * 1.4;
