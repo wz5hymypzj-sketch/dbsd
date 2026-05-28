@@ -472,6 +472,81 @@
 </div>
 
 <script>
+// Reset scroll position instantly on orientation change so landscape starts at top
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => { window.scrollTo(0, 0); document.body.scrollTop = 0; document.documentElement.scrollTop = 0; }, 50);
+});
+window.addEventListener('resize', () => { window.scrollTo(0, 0); });
+
+// Auto-resume microphone when returning to the app after backgrounding
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !isRunning || micPaused) return;
+
+  // Case 1: AudioContext was simply suspended by the OS — just wake it back up
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try { await audioCtx.resume(); } catch(e) {}
+  }
+
+  // Case 2: iOS killed the MediaStream tracks entirely — full audio pipeline rebuild
+  const tracksLost = !micStream || micStream.getTracks().every(t => t.readyState === 'ended');
+  if (tracksLost) {
+    try {
+      // Tear down old context cleanly
+      if (audioCtx) { try { audioCtx.close(); } catch(e) {} audioCtx = null; }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+      micStream = stream;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      const src = audioCtx.createMediaStreamSource(stream);
+
+      analyserFull = audioCtx.createAnalyser(); analyserFull.fftSize = 4096; analyserFull.smoothingTimeConstant = 0.7;
+      tunerFilter = audioCtx.createBiquadFilter(); tunerFilter.type = 'bandpass'; tunerFilter.frequency.value = 440.0; tunerFilter.Q.value = 8.0;
+      analyserTuner = audioCtx.createAnalyser(); analyserTuner.fftSize = 4096;
+      src.connect(tunerFilter); tunerFilter.connect(analyserTuner);
+
+      const cfg = getConfig(lowerMidi, curIv); filters = buildFilters(cfg);
+      gainNode = audioCtx.createGain(); gainNode.gain.value = 250.0;
+      monitorGain = audioCtx.createGain(); monitorGain.gain.value = monitorOn ? 25.0 : 0.0;
+      scriptNode = audioCtx.createScriptProcessor(1024, 1, 1);
+
+      src.connect(analyserFull); src.connect(filters[0]); filters[0].connect(filters[1]); filters[1].connect(filters[2]);
+      filters[2].connect(gainNode); filters[2].connect(monitorGain); monitorGain.connect(audioCtx.destination);
+      gainNode.connect(scriptNode); scriptNode.connect(audioCtx.destination);
+
+      scriptNode.onaudioprocess = (e) => {
+        if (!isRunning || micPaused) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        for (let offset = 0; offset < inputData.length; offset += currentChunkSize) {
+          let sum = 0, limit = Math.min(currentChunkSize, inputData.length - offset);
+          for (let i = 0; i < limit; i++) sum += inputData[offset + i] * inputData[offset + i];
+          const rms = Math.sqrt(sum / limit); envelopeRunning = rms;
+          const strikeMult = currentChunkSize === 256 ? 1.8 : 2.5;
+          const isStrike = (envelopeRunning > lastEnvelope * strikeMult) && (envelopeRunning > 0.005);
+          lastEnvelope = envelopeRunning;
+          noiseFloor = noiseFloor * 0.996 + Math.min(envelopeRunning, noiseFloor * 1.5) * 0.004;
+          if (noiseFloor < 0.000001) noiseFloor = 0.000001;
+          const snr = envelopeRunning / noiseFloor;
+          if (isStrike && snr > 3.0) {
+            const timeNow = performance.now();
+            if (timeNow - lastAttackTime > 400 && (captureState === 'IDLE' || captureState === 'LOCKED')) {
+              envHistory = []; lastAttackTime = timeNow; transientSamplesLeft = currentChunkSize === 256 ? 72 : 18;
+              captureState = 'WAIT'; captureStartTime = timeNow; capturedBeats = [];
+              $('captureStateLbl').textContent = 'WAITING...'; $('captureStateLbl').style.color = '#ff9900';
+            }
+          }
+          if (transientSamplesLeft > 0) { transientSamplesLeft--; }
+          else { envHistory.push({ val: envelopeRunning }); const fps = audioCtx.sampleRate / currentChunkSize; if (envHistory.length > Math.round(3.5 * fps)) envHistory.shift(); }
+        }
+      };
+
+      // Restart render loop if it died
+      if (rafId) cancelAnimationFrame(rafId);
+      lastEnvelope = 0; rafId = requestAnimationFrame(renderLoop);
+    } catch(e) { console.warn('Mic reinit failed on resume:', e); }
+  }
+});
+
 const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const IS_SHARP = new Set([1,3,6,8,10]);
 const freq = m => 440 * Math.pow(2, (m - 69) / 12);
@@ -531,7 +606,8 @@ function getDynamicThresholds(midiNote, ivKey) {
 
 let curIv = 'M3', lowerMidi = 53, rollBaseMidi = 53; 
 let audioCtx = null, analyserFull = null, analyserTuner = null, filters = [], tunerFilter = null, gainNode = null, monitorGain = null;
-let isRunning = false, micPaused = false, monitorOn = false, rafId = null, currentChunkSize = 1024; 
+let isRunning = false, micPaused = false, monitorOn = false, rafId = null, currentChunkSize = 1024;
+let micStream = null, scriptNode = null; 
 let noiseFloor = 0.001, envelopeRunning = 0, lastEnvelope = 0, envHistory = [];    
 let transientSamplesLeft = 0, lastAttackTime = 0;
 let loggedIntervals = { M3: [], M6: [], P4: [], P5: [], P8: [], M10: [], P12: [], P15: [], M17: [] };
@@ -978,6 +1054,7 @@ $('bigStartBtn').addEventListener('click', async () => {
   $('startOverlay').style.display = 'none';
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+    micStream = stream;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     const src = audioCtx.createMediaStreamSource(stream);
@@ -990,7 +1067,7 @@ $('bigStartBtn').addEventListener('click', async () => {
     const cfg = getConfig(lowerMidi, curIv); filters = buildFilters(cfg);
     gainNode = audioCtx.createGain(); gainNode.gain.value = 250.0; 
     monitorGain = audioCtx.createGain(); monitorGain.gain.value = monitorOn && !micPaused ? 25.0 : 0.0;
-    const scriptNode = audioCtx.createScriptProcessor(1024, 1, 1);
+    scriptNode = audioCtx.createScriptProcessor(1024, 1, 1);
 
     src.connect(analyserFull); src.connect(filters[0]); filters[0].connect(filters[1]); filters[1].connect(filters[2]); 
     filters[2].connect(gainNode); filters[2].connect(monitorGain); monitorGain.connect(audioCtx.destination);
