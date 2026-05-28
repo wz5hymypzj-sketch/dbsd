@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DAN'S BEAT SPEED DETECTOR - V20</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -157,67 +157,32 @@
   
   .laptop-hint { text-align: center; font-size: 0.55rem; color: #888; margin-top: 8px; margin-bottom: 4px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em; flex-shrink: 0; }
 
-  /* Portrait: display:contents makes leftCol transparent -
-     children participate directly in body flex, preserving exact portrait layout */
-  #leftCol { display: contents; }
+  /* Layout Wrapper Styles (Handles Portrait and Landscape orientation splits) */
+  .layout-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .left-panel {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
 
-  /* ===== LANDSCAPE PHONE MODE (phones only - desktop excluded by max-height) ===== */
-  @media (orientation: landscape) and (max-height: 500px) {
-    body {
-      max-width: 100%;
-      padding-top: env(safe-area-inset-top, 4px);
-      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
-      padding-left: calc(env(safe-area-inset-left, 0px) + 4px);
-      padding-right: calc(env(safe-area-inset-right, 0px) + 4px);
-    }
-    /* leftCol becomes a 2-column grid:
-       col 1 (55%): all controls + nav buttons (pushed to bottom via 1fr row)
-       col 2 (45%): workspace, spans all rows */
-    #leftCol {
-      display: grid;
-      grid-template-columns: 55fr 45fr;
-      grid-template-rows: auto auto auto auto auto 1fr auto;
-      column-gap: 6px;
-      flex: 1 1 auto;
-      min-height: 0;
-    }
-    /* Assign each control to column 1 */
-    .header          { grid-column: 1; grid-row: 1; margin-bottom: 2px; }
-    .iv-tabs         { grid-column: 1; grid-row: 2; margin-bottom: 2px; }
-    .roll-wrapper    { grid-column: 1; grid-row: 3; margin-bottom: 2px; }
-    .param-strip     { grid-column: 1; grid-row: 4; margin-bottom: 2px; }
-    .dual-readout    { grid-column: 1; grid-row: 5; margin-bottom: 0; }
-    .big-nav-controls{ grid-column: 1; grid-row: 6; align-self: end; gap: 6px; padding-top: 0; }
-    .laptop-hint     { grid-column: 1; grid-row: 7; margin-top: 2px; margin-bottom: 0; font-size: 0.48rem; }
-    /* Workspace: column 2, spans all 7 rows, fills full height */
-    .workspace {
-      grid-column: 2;
-      grid-row: 1 / 8;
-      overflow-y: auto;
-      border-radius: 4px;
-      border: 1px solid #000;
-      align-self: stretch;
-    }
-    /* Scale down controls to fit landscape height */
-    h1 { font-size: 0.7rem; margin-bottom: 2px; }
-    .mode-btn { font-size: 0.55rem; padding: 4px 1px; }
-    .iv-tab { padding: 3px 0; font-size: 0.55rem; }
-    .roll-wrapper { padding: 2px; }
-    .pk { height: 44px; font-size: 0.58rem; padding-bottom: 3px; }
-    .pk.sh { height: 28px; }
-    .roll-nav { height: 34px; width: 24px; font-size: 0.9rem; }
-    .param-strip { padding: 3px 8px; }
-    .param-lbl { font-size: 0.55rem; }
-    #lblInterval { font-size: 0.85rem !important; }
-    #coincidentPartial { font-size: 0.7rem !important; }
-    .readout-box { padding: 3px 6px; }
-    .val-large { font-size: 1.7rem; }
-    .val-lbl { font-size: 0.65rem; margin-top: 0; }
-    .textbook-bps { font-size: 0.65rem; bottom: 3px; right: 6px; }
-    #signalLight { width: 9px; height: 9px; top: 5px; left: 6px; }
-    #captureStateLbl { font-size: 0.58rem; top: 5px; right: 6px; }
-    .big-nav-controls button { height: 30px; font-size: 0.95rem; box-shadow: 0 3px 0 #000; }
-    .big-nav-controls button:active { transform: translateY(1px); box-shadow: 0 1px 0 #000; }
+  @media (orientation: landscape) {
+    body { max-width: 900px; padding: 10px; }
+    .layout-wrapper { flex-direction: row; gap: 12px; }
+    .left-panel { flex: 55; height: 100%; overflow-y: auto; padding-right: 4px; }
+    .left-panel::-webkit-scrollbar { display: none; }
+    .right-panel { flex: 45; height: 100%; }
   }
 </style>
 </head>
@@ -228,234 +193,239 @@
   <button id="bigStartBtn">ENTER</button>
 </div>
 
-<div id="leftCol">
-<div class="header">
-  <h1>DAN'S BEAT SPEED DETECTOR</h1>
-  <div class="controls-row">
-    <button class="mode-btn active" id="btnModeDet" onclick="switchMainMode('DET')">LOGS</button>
-    <button class="mode-btn" id="btnModeGuide" onclick="switchMainMode('GUIDE')">GUIDE</button>
-    <button class="mode-btn active" id="btnPause">MIC: ON</button>
-    <button class="mode-btn" id="btnPassThrough">PASS: OFF</button>
-  </div>
-</div>
-
-<div class="iv-tabs" id="ivTabs">
-  <button class="iv-tab on" data-iv="M3">M3</button>
-  <button class="iv-tab" data-iv="M6">M6</button>
-  <button class="iv-tab" data-iv="P4">P4</button>
-  <button class="iv-tab" data-iv="P5">P5</button>
-  <button class="iv-tab" data-iv="P8">P8</button>
-  <button class="iv-tab" data-iv="M10">M10</button>
-  <button class="iv-tab" data-iv="P12">P12</button>
-  <button class="iv-tab" data-iv="P15">P15</button>
-  <button class="iv-tab" data-iv="M17">M17</button>
-</div>
-
-<div class="roll-wrapper">
-  <button class="roll-nav" id="octDown">‹</button>
-  <div class="piano-roll" id="pianoRoll"></div>
-  <button class="roll-nav" id="octUp">›</button>
-</div>
-
-<div class="param-strip">
-  <div class="param-side" style="text-align: left;">
-    <span class="param-lbl">Interval</span>
-    <b id="lblInterval" style="font-size: 1.1rem; font-weight: 900;">—</b>
-  </div>
-  <div class="param-side" style="text-align: right;">
-    <span class="param-lbl">Coincident Partial</span>
-    <b id="coincidentPartial" style="font-size: 0.95rem; font-weight: 800;">—</b>
-  </div>
-</div>
-
-<div class="dual-readout">
-  <div class="readout-box">
-    <div id="signalLight"></div>
-    <div id="captureStateLbl">IDLE</div>
-    <div class="val-large" id="avgVal">—</div>
-    <div class="val-lbl">AVERAGE BPS</div>
-    <div class="textbook-bps" id="lblTarget">~—</div>
-  </div>
-</div>
-
-<div class="workspace">
-  <div id="logContainer">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; padding: 4px 8px;">
-      <span style="font-size: 0.8rem; font-weight: bold; text-transform: uppercase; color: #333;">Progression Log</span>
-      <button class="ctrl-btn" id="clearBtn">Clear All Data</button>
-    </div>
-    <table>
-      <thead><tr><th>Int.</th><th>Note</th><th>Measured</th><th>% Δ</th><th>Ref</th><th></th></tr></thead>
-      <tbody id="logBody"><tr><td colspan="6" style="text-align:center; padding:15px; color:#666;">Logs automatically upon solid capture</td></tr></tbody>
-    </table>
-    <div id="analysisBox" style="display: none;"></div>
-  </div>
-
-  <div id="guideContainer" style="display: none; height: 100%; flex-direction: column;">
-    <div class="guide-tabs">
-      <button class="gt-btn active" onclick="switchGuideTab('TEMP')">TEMP</button>
-      <button class="gt-btn" onclick="switchGuideTab('UP')">UP</button>
-      <button class="gt-btn" onclick="switchGuideTab('DOWN')">DOWN</button>
-      <button class="gt-btn" onclick="switchGuideTab('CHECK')">CHECKS</button>
-    </div>
-
-    <div class="guide-pane active" id="gPane-TEMP">
-      <div class="guide-step">
-        <h3>1. Tune A4 (Concert Pitch)</h3>
-        <button class="ctrl-btn" id="btnTunerToggle" style="width:100%; margin-bottom:4px; font-size:0.8rem;">TUNER: OFF</button>
-        <div class="guide-result guide-res-wait" id="tunerReadout" style="min-height: 38px; display:flex; align-items:center; justify-content:center; flex-direction:column;">--- Hz</div>
-      </div>
-      <div class="guide-step">
-        <h3>2. Prove A3 from A4</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="53" data-iv="M3" data-label="F3 (M3)" onclick="setTarget(53, 'M3')">F3 (M3)</button>
-          <button class="action-btn" data-midi="53" data-iv="M10" data-label="F3 (M10)" onclick="setTarget(53, 'M10')">F3 (M10)</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes2">Awaiting logs...</div>
-      </div>
-      <div class="guide-step">
-        <h3>3. Set F3 Anchor</h3>
-        <p>Aim for ~6.93 bps.</p>
-        <div class="action-row"><button class="action-btn" data-midi="53" data-iv="M3" data-label="F3 (M3)" onclick="setTarget(53, 'M3')">F3 (M3)</button></div>
-        <div class="guide-result guide-res-wait" id="guideRes3">Awaiting logs...</div>
-      </div>
-      <div class="guide-step">
-        <h3>4. Prove F3-F4 Octave</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="49" data-iv="M3" data-label="C#3 (M3)" onclick="setTarget(49, 'M3')">C#3 (M3)</button>
-          <button class="action-btn" data-midi="49" data-iv="M10" data-label="C#3 (M10)" onclick="setTarget(49, 'M10')">C#3 (M10)</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes4">Awaiting logs...</div>
-      </div>
-      <div class="guide-step">
-        <h3>5. The 'F' Skeleton (Contiguous 3rds)</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="53" data-iv="M3" data-label="F3 (M3)" onclick="setTarget(53, 'M3')">F3 (M3)</button>
-          <button class="action-btn" data-midi="57" data-iv="M3" data-label="A3 (M3)" onclick="setTarget(57, 'M3')">A3 (M3)</button>
-          <button class="action-btn" data-midi="61" data-iv="M3" data-label="C#4 (M3)" onclick="setTarget(61, 'M3')">C#4 (M3)</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes5">Awaiting logs...</div>
-      </div>
-      <div class="guide-step">
-        <h3>6. The 'F#' Skeleton</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="54" data-iv="P5" data-label="F#3 (P5)" onclick="setTarget(54, 'P5')">F#3 (P5)</button>
-          <button class="action-btn" data-midi="53" data-iv="P4" data-label="F3 (P4)" onclick="setTarget(53, 'P4')">F3 (P4)</button>
-          <button class="action-btn" data-midi="57" data-iv="P4" data-label="A3 (P4)" onclick="setTarget(57, 'P4')">A3 (P4)</button>
-          <button class="action-btn" data-midi="54" data-iv="M3" data-label="F#3 (M3)" onclick="setTarget(54, 'M3')">F#3 (M3)</button>
-          <button class="action-btn" data-midi="58" data-iv="M3" data-label="A#3 (M3)" onclick="setTarget(58, 'M3')">A#3 (M3)</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes6">Awaiting M3 and P4/P5 checks...</div>
-      </div>
-      <div class="guide-step">
-        <h3>7. The 'G' Skeleton</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="55" data-iv="P5" data-label="G3 (P5)" onclick="setTarget(55, 'P5')">G3 (P5)</button>
-          <button class="action-btn" data-midi="54" data-iv="P4" data-label="F#3 (P4)" onclick="setTarget(54, 'P4')">F#3 (P4)</button>
-          <button class="action-btn" data-midi="58" data-iv="P4" data-label="A#3 (P4)" onclick="setTarget(58, 'P4')">A#3 (P4)</button>
-          <button class="action-btn" data-midi="55" data-iv="M3" data-label="G3 (M3)" onclick="setTarget(55, 'M3')">G3 (M3)</button>
-          <button class="action-btn" data-midi="59" data-iv="M3" data-label="B3 (M3)" onclick="setTarget(59, 'M3')">B3 (M3)</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes7">Awaiting M3 and P4/P5 checks...</div>
-      </div>
-      <div class="guide-step">
-        <h3>8. The 'G#' Skeleton</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="56" data-iv="P5" data-label="G#3 (P5)" onclick="setTarget(56, 'P5')">G#3 (P5)</button>
-          <button class="action-btn" data-midi="55" data-iv="P4" data-label="G3 (P4)" onclick="setTarget(55, 'P4')">G3 (P4)</button>
-          <button class="action-btn" data-midi="59" data-iv="P4" data-label="B3 (P4)" onclick="setTarget(59, 'P4')">B3 (P4)</button>
-          <button class="action-btn" data-midi="56" data-iv="M3" data-label="G#3 (M3)" onclick="setTarget(56, 'M3')">G#3 (M3)</button>
-          <button class="action-btn" data-midi="60" data-iv="M3" data-label="C4 (M3)" onclick="setTarget(60, 'M3')">C4 (M3)</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes8">Awaiting M3 and P4/P5 checks...</div>
-      </div>
-      <div class="guide-step">
-        <h3>9. Inside 4ths & 5ths Verification</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="53" data-iv="P5" data-label="F3 (P5)" onclick="setTarget(53, 'P5')">F3 (P5)</button>
-          <button class="action-btn" data-midi="60" data-iv="P4" data-label="C4 (P4)" onclick="setTarget(60, 'P4')">C4 (P4)</button>
-          <button class="action-btn" data-midi="54" data-iv="P5" data-label="F#3 (P5)" onclick="setTarget(54, 'P5')">F#3 (P5)</button>
-          <button class="action-btn" data-midi="61" data-iv="P4" data-label="C#4 (P4)" onclick="setTarget(61, 'P4')">C#4 (P4)</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes9">Awaiting logs...</div>
-      </div>
-      <div class="guide-step">
-        <h3>10. Chromatic M3 Sweep</h3>
-        <div class="action-row">
-          <button class="action-btn" data-midi="53" data-iv="M3" data-label="F3" onclick="setTarget(53, 'M3')">F3</button>
-          <button class="action-btn" data-midi="54" data-iv="M3" data-label="F#3" onclick="setTarget(54, 'M3')">F#3</button>
-          <button class="action-btn" data-midi="55" data-iv="M3" data-label="G3" onclick="setTarget(55, 'M3')">G3</button>
-          <button class="action-btn" data-midi="56" data-iv="M3" data-label="G#3" onclick="setTarget(56, 'M3')">G#3</button>
-          <button class="action-btn" data-midi="57" data-iv="M3" data-label="A3" onclick="setTarget(57, 'M3')">A3</button>
-          <button class="action-btn" data-midi="58" data-iv="M3" data-label="A#3" onclick="setTarget(58, 'M3')">A#3</button>
-          <button class="action-btn" data-midi="59" data-iv="M3" data-label="B3" onclick="setTarget(59, 'M3')">B3</button>
-          <button class="action-btn" data-midi="60" data-iv="M3" data-label="C4" onclick="setTarget(60, 'M3')">C4</button>
-          <button class="action-btn" data-midi="61" data-iv="M3" data-label="C#4" onclick="setTarget(61, 'M3')">C#4</button>
-        </div>
-        <div class="guide-result guide-res-wait" id="guideRes10">Awaiting logs...</div>
+<div class="layout-wrapper">
+  
+  <div class="left-panel">
+    <div class="header">
+      <h1>DAN'S BEAT SPEED DETECTOR</h1>
+      <div class="controls-row">
+        <button class="mode-btn active" id="btnModeDet" onclick="switchMainMode('DET')">LOGS</button>
+        <button class="mode-btn" id="btnModeGuide" onclick="switchMainMode('GUIDE')">GUIDE</button>
+        <button class="mode-btn active" id="btnPause">MIC: ON</button>
+        <button class="mode-btn" id="btnPassThrough">PASS: OFF</button>
       </div>
     </div>
 
-    <div class="guide-pane" id="gPane-UP">
-      <div class="guide-step">
-        <h3>Expand Treble (Prove Octaves)</h3>
-        <p style="text-align:center;">Select the upper note you are tuning.</p>
-        <div class="dynamic-controls">
-          <button class="dynamic-btn" id="btnUpMinus" onclick="changeExpandNote(-1, true)">-</button>
-          <span class="dynamic-target" id="dynUpTarget">F#4</span>
-          <button class="dynamic-btn" id="btnUpPlus" onclick="changeExpandNote(1, true)">+</button>
-        </div>
-        <p>Tune to octave below. Click buttons to verify:</p>
-        <div class="action-row" id="dynUpBtns"></div>
-        <div class="guide-result guide-res-wait" id="dynUpRes">Log intervals to analyze...</div>
+    <div class="iv-tabs" id="ivTabs">
+      <button class="iv-tab on" data-iv="M3">M3</button>
+      <button class="iv-tab" data-iv="M6">M6</button>
+      <button class="iv-tab" data-iv="P4">P4</button>
+      <button class="iv-tab" data-iv="P5">P5</button>
+      <button class="iv-tab" data-iv="P8">P8</button>
+      <button class="iv-tab" data-iv="M10">M10</button>
+      <button class="iv-tab" data-iv="P12">P12</button>
+      <button class="iv-tab" data-iv="P15">P15</button>
+      <button class="iv-tab" data-iv="M17">M17</button>
+    </div>
+
+    <div class="roll-wrapper">
+      <button class="roll-nav" id="octDown">‹</button>
+      <div class="piano-roll" id="pianoRoll"></div>
+      <button class="roll-nav" id="octUp">›</button>
+    </div>
+
+    <div class="param-strip">
+      <div class="param-side" style="text-align: left;">
+        <span class="param-lbl">Interval</span>
+        <b id="lblInterval" style="font-size: 1.1rem; font-weight: 900;">—</b>
+      </div>
+      <div class="param-side" style="text-align: right;">
+        <span class="param-lbl">Coincident Partial</span>
+        <b id="coincidentPartial" style="font-size: 0.95rem; font-weight: 800;">—</b>
       </div>
     </div>
 
-    <div class="guide-pane" id="gPane-DOWN">
-      <div class="guide-step">
-        <h3>Expand Bass (Prove Octaves)</h3>
-        <p style="text-align:center;">Select the lower note you are tuning.</p>
-        <div class="dynamic-controls">
-          <button class="dynamic-btn" id="btnDownMinus" onclick="changeExpandNote(-1, false)">-</button>
-          <span class="dynamic-target" id="dynDownTarget">E3</span>
-          <button class="dynamic-btn" id="btnDownPlus" onclick="changeExpandNote(1, false)">+</button>
+    <div class="dual-readout">
+      <div class="readout-box">
+        <div id="signalLight"></div>
+        <div id="captureStateLbl">IDLE</div>
+        <div class="val-large" id="avgVal">—</div>
+        <div class="val-lbl">AVERAGE BPS</div>
+        <div class="textbook-bps" id="lblTarget">~—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="workspace">
+      <div id="logContainer">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; padding: 4px 8px;">
+          <span style="font-size: 0.8rem; font-weight: bold; text-transform: uppercase; color: #333;">Progression Log</span>
+          <button class="ctrl-btn" id="clearBtn">Clear All Data</button>
         </div>
-        <p>Tune to octave above. Click buttons to verify:</p>
-        <div class="action-row" id="dynDownBtns"></div>
-        <div class="guide-result guide-res-wait" id="dynDownRes">Log intervals to analyze...</div>
+        <table>
+          <thead><tr><th>Int.</th><th>Note</th><th>Measured</th><th>% Δ</th><th>Ref</th><th></th></tr></thead>
+          <tbody id="logBody"><tr><td colspan="6" style="text-align:center; padding:15px; color:#666;">Logs automatically upon solid capture</td></tr></tbody>
+        </table>
+        <div id="analysisBox" style="display: none;"></div>
+      </div>
+
+      <div id="guideContainer" style="display: none; height: 100%; flex-direction: column;">
+        <div class="guide-tabs">
+          <button class="gt-btn active" onclick="switchGuideTab('TEMP')">TEMP</button>
+          <button class="gt-btn" onclick="switchGuideTab('UP')">UP</button>
+          <button class="gt-btn" onclick="switchGuideTab('DOWN')">DOWN</button>
+          <button class="gt-btn" onclick="switchGuideTab('CHECK')">CHECKS</button>
+        </div>
+
+        <div class="guide-pane active" id="gPane-TEMP">
+          <div class="guide-step">
+            <h3>1. Tune A4 (Concert Pitch)</h3>
+            <button class="ctrl-btn" id="btnTunerToggle" style="width:100%; margin-bottom:4px; font-size:0.8rem;">TUNER: OFF</button>
+            <div class="guide-result guide-res-wait" id="tunerReadout" style="min-height: 38px; display:flex; align-items:center; justify-content:center; flex-direction:column;">--- Hz</div>
+          </div>
+          <div class="guide-step">
+            <h3>2. Prove A3 from A4</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="53" data-iv="M3" data-label="F3 (M3)" onclick="setTarget(53, 'M3')">F3 (M3)</button>
+              <button class="action-btn" data-midi="53" data-iv="M10" data-label="F3 (M10)" onclick="setTarget(53, 'M10')">F3 (M10)</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes2">Awaiting logs...</div>
+          </div>
+          <div class="guide-step">
+            <h3>3. Set F3 Anchor</h3>
+            <p>Aim for ~6.93 bps.</p>
+            <div class="action-row"><button class="action-btn" data-midi="53" data-iv="M3" data-label="F3 (M3)" onclick="setTarget(53, 'M3')">F3 (M3)</button></div>
+            <div class="guide-result guide-res-wait" id="guideRes3">Awaiting logs...</div>
+          </div>
+          <div class="guide-step">
+            <h3>4. Prove F3-F4 Octave</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="49" data-iv="M3" data-label="C#3 (M3)" onclick="setTarget(49, 'M3')">C#3 (M3)</button>
+              <button class="action-btn" data-midi="49" data-iv="M10" data-label="C#3 (M10)" onclick="setTarget(49, 'M10')">C#3 (M10)</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes4">Awaiting logs...</div>
+          </div>
+          <div class="guide-step">
+            <h3>5. The 'F' Skeleton (Contiguous 3rds)</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="53" data-iv="M3" data-label="F3 (M3)" onclick="setTarget(53, 'M3')">F3 (M3)</button>
+              <button class="action-btn" data-midi="57" data-iv="M3" data-label="A3 (M3)" onclick="setTarget(57, 'M3')">A3 (M3)</button>
+              <button class="action-btn" data-midi="61" data-iv="M3" data-label="C#4 (M3)" onclick="setTarget(61, 'M3')">C#4 (M3)</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes5">Awaiting logs...</div>
+          </div>
+          <div class="guide-step">
+            <h3>6. The 'F#' Skeleton</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="54" data-iv="P5" data-label="F#3 (P5)" onclick="setTarget(54, 'P5')">F#3 (P5)</button>
+              <button class="action-btn" data-midi="53" data-iv="P4" data-label="F3 (P4)" onclick="setTarget(53, 'P4')">F3 (P4)</button>
+              <button class="action-btn" data-midi="57" data-iv="P4" data-label="A3 (P4)" onclick="setTarget(57, 'P4')">A3 (P4)</button>
+              <button class="action-btn" data-midi="54" data-iv="M3" data-label="F#3 (M3)" onclick="setTarget(54, 'M3')">F#3 (M3)</button>
+              <button class="action-btn" data-midi="58" data-iv="M3" data-label="A#3 (M3)" onclick="setTarget(58, 'M3')">A#3 (M3)</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes6">Awaiting M3 and P4/P5 checks...</div>
+          </div>
+          <div class="guide-step">
+            <h3>7. The 'G' Skeleton</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="55" data-iv="P5" data-label="G3 (P5)" onclick="setTarget(55, 'P5')">G3 (P5)</button>
+              <button class="action-btn" data-midi="54" data-iv="P4" data-label="F#3 (P4)" onclick="setTarget(54, 'P4')">F#3 (P4)</button>
+              <button class="action-btn" data-midi="58" data-iv="P4" data-label="A#3 (P4)" onclick="setTarget(58, 'P4')">A#3 (P4)</button>
+              <button class="action-btn" data-midi="55" data-iv="M3" data-label="G3 (M3)" onclick="setTarget(55, 'M3')">G3 (M3)</button>
+              <button class="action-btn" data-midi="59" data-iv="M3" data-label="B3 (M3)" onclick="setTarget(59, 'M3')">B3 (M3)</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes7">Awaiting M3 and P4/P5 checks...</div>
+          </div>
+          <div class="guide-step">
+            <h3>8. The 'G#' Skeleton</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="56" data-iv="P5" data-label="G#3 (P5)" onclick="setTarget(56, 'P5')">G#3 (P5)</button>
+              <button class="action-btn" data-midi="55" data-iv="P4" data-label="G3 (P4)" onclick="setTarget(55, 'P4')">G3 (P4)</button>
+              <button class="action-btn" data-midi="59" data-iv="P4" data-label="B3 (P4)" onclick="setTarget(59, 'P4')">B3 (P4)</button>
+              <button class="action-btn" data-midi="56" data-iv="M3" data-label="G#3 (M3)" onclick="setTarget(56, 'M3')">G#3 (M3)</button>
+              <button class="action-btn" data-midi="60" data-iv="M3" data-label="C4 (M3)" onclick="setTarget(60, 'M3')">C4 (M3)</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes8">Awaiting M3 and P4/P5 checks...</div>
+          </div>
+          <div class="guide-step">
+            <h3>9. Inside 4ths & 5ths Verification</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="53" data-iv="P5" data-label="F3 (P5)" onclick="setTarget(53, 'P5')">F3 (P5)</button>
+              <button class="action-btn" data-midi="60" data-iv="P4" data-label="C4 (P4)" onclick="setTarget(60, 'P4')">C4 (P4)</button>
+              <button class="action-btn" data-midi="54" data-iv="P5" data-label="F#3 (P5)" onclick="setTarget(54, 'P5')">F#3 (P5)</button>
+              <button class="action-btn" data-midi="61" data-iv="P4" data-label="C#4 (P4)" onclick="setTarget(61, 'P4')">C#4 (P4)</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes9">Awaiting logs...</div>
+          </div>
+          <div class="guide-step">
+            <h3>10. Chromatic M3 Sweep</h3>
+            <div class="action-row">
+              <button class="action-btn" data-midi="53" data-iv="M3" data-label="F3" onclick="setTarget(53, 'M3')">F3</button>
+              <button class="action-btn" data-midi="54" data-iv="M3" data-label="F#3" onclick="setTarget(54, 'M3')">F#3</button>
+              <button class="action-btn" data-midi="55" data-iv="M3" data-label="G3" onclick="setTarget(55, 'M3')">G3</button>
+              <button class="action-btn" data-midi="56" data-iv="M3" data-label="G#3" onclick="setTarget(56, 'M3')">G#3</button>
+              <button class="action-btn" data-midi="57" data-iv="M3" data-label="A3" onclick="setTarget(57, 'M3')">A3</button>
+              <button class="action-btn" data-midi="58" data-iv="M3" data-label="A#3" onclick="setTarget(58, 'M3')">A#3</button>
+              <button class="action-btn" data-midi="59" data-iv="M3" data-label="B3" onclick="setTarget(59, 'M3')">B3</button>
+              <button class="action-btn" data-midi="60" data-iv="M3" data-label="C4" onclick="setTarget(60, 'M3')">C4</button>
+              <button class="action-btn" data-midi="61" data-iv="M3" data-label="C#4" onclick="setTarget(61, 'M3')">C#4</button>
+            </div>
+            <div class="guide-result guide-res-wait" id="guideRes10">Awaiting logs...</div>
+          </div>
+        </div>
+
+        <div class="guide-pane" id="gPane-UP">
+          <div class="guide-step">
+            <h3>Expand Treble (Prove Octaves)</h3>
+            <p style="text-align:center;">Select the upper note you are tuning.</p>
+            <div class="dynamic-controls">
+              <button class="dynamic-btn" id="btnUpMinus" onclick="changeExpandNote(-1, true)">-</button>
+              <span class="dynamic-target" id="dynUpTarget">F#4</span>
+              <button class="dynamic-btn" id="btnUpPlus" onclick="changeExpandNote(1, true)">+</button>
+            </div>
+            <p>Tune to octave below. Click buttons to verify:</p>
+            <div class="action-row" id="dynUpBtns"></div>
+            <div class="guide-result guide-res-wait" id="dynUpRes">Log intervals to analyze...</div>
+          </div>
+        </div>
+
+        <div class="guide-pane" id="gPane-DOWN">
+          <div class="guide-step">
+            <h3>Expand Bass (Prove Octaves)</h3>
+            <p style="text-align:center;">Select the lower note you are tuning.</p>
+            <div class="dynamic-controls">
+              <button class="dynamic-btn" id="btnDownMinus" onclick="changeExpandNote(-1, false)">-</button>
+              <span class="dynamic-target" id="dynDownTarget">E3</span>
+              <button class="dynamic-btn" id="btnDownPlus" onclick="changeExpandNote(1, false)">+</button>
+            </div>
+            <p>Tune to octave above. Click buttons to verify:</p>
+            <div class="action-row" id="dynDownBtns"></div>
+            <div class="guide-result guide-res-wait" id="dynDownRes">Log intervals to analyze...</div>
+          </div>
+        </div>
+
+        <div class="guide-pane" id="gPane-CHECK">
+          <div class="guide-step">
+            <h3 style="text-align:center;">Dynamic Sweep Checker</h3>
+            <p style="text-align:center;">Select an interval to sweep:</p>
+            <div class="action-row" style="margin-bottom: 8px;">
+              <button class="action-btn" onclick="setSweep('M3')">M3</button>
+              <button class="action-btn" onclick="setSweep('M6')">M6</button>
+              <button class="action-btn" onclick="setSweep('M10')">M10</button>
+              <button class="action-btn" onclick="setSweep('M17')">M17</button>
+            </div>
+            <div class="dynamic-controls">
+              <button class="dynamic-btn" onclick="changeSweepNote(-1)">-</button>
+              <span class="dynamic-target" id="dynSweepTarget">F2</span>
+              <button class="dynamic-btn" onclick="changeSweepNote(1)">+</button>
+            </div>
+            <p id="sweepCurrentInterval" style="text-align:center; font-weight:700; margin-bottom:8px; font-size: 0.8rem;">M3: F2 - A2</p>
+            <button class="ctrl-btn" style="width:100%; margin-bottom:8px;" onclick="triggerSweepTarget()">TARGET CURRENT INTERVAL</button>
+            <div class="guide-result guide-res-wait" id="dynSweepRes">Log interval to track sweep...</div>
+          </div>
+        </div>
+
       </div>
     </div>
 
-    <div class="guide-pane" id="gPane-CHECK">
-      <div class="guide-step">
-        <h3 style="text-align:center;">Dynamic Sweep Checker</h3>
-        <p style="text-align:center;">Select an interval to sweep:</p>
-        <div class="action-row" style="margin-bottom: 8px;">
-          <button class="action-btn" onclick="setSweep('M3')">M3</button>
-          <button class="action-btn" onclick="setSweep('M6')">M6</button>
-          <button class="action-btn" onclick="setSweep('M10')">M10</button>
-          <button class="action-btn" onclick="setSweep('M17')">M17</button>
-        </div>
-        <div class="dynamic-controls">
-          <button class="dynamic-btn" onclick="changeSweepNote(-1)">-</button>
-          <span class="dynamic-target" id="dynSweepTarget">F2</span>
-          <button class="dynamic-btn" onclick="changeSweepNote(1)">+</button>
-        </div>
-        <p id="sweepCurrentInterval" style="text-align:center; font-weight:700; margin-bottom:8px; font-size: 0.8rem;">M3: F2 - A2</p>
-        <button class="ctrl-btn" style="width:100%; margin-bottom:8px;" onclick="triggerSweepTarget()">TARGET CURRENT INTERVAL</button>
-        <div class="guide-result guide-res-wait" id="dynSweepRes">Log interval to track sweep...</div>
-      </div>
+    <div class="big-nav-controls">
+      <button id="btnBigDown">-1st</button>
+      <button id="btnBigUp">+1st</button>
     </div>
-
+    <div class="laptop-hint">Arrow keys to change notes</div>
   </div>
 </div>
-
-<div class="big-nav-controls">
-  <button id="btnBigDown">-1st</button>
-  <button id="btnBigUp">+1st</button>
-</div>
-<div class="laptop-hint">Arrow keys to change notes</div>
-</div><!-- /#leftCol -->
 
 <script>
 const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
